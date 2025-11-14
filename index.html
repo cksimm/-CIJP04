@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Local RAG Chatbot (FAISS)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; }
+    h1 { font-size: 1.6rem; margin: 0 0 12px; }
+    #chat { border: 1px solid #ccc; border-radius: 10px; padding: 12px; height: 420px; overflow-y: auto; white-space: pre-wrap; background: rgba(0,0,0,0.02); }
+    .row { margin: 8px 0; }
+    .you  { font-weight: 600; }
+    .bot  { }
+    .srcs { opacity: 0.8; font-size: 0.95em; }
+    textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font: inherit; resize: vertical; min-height: 60px; }
+    button { margin-top: 8px; padding: 10px 16px; border: none; border-radius: 8px; background: #0b65d8; color: white; font: 1rem inherit; cursor: pointer; }
+    button[disabled] { opacity: 0.6; cursor: wait; }
+  </style>
+</head>
+<body>
+  <h1>💬 Local RAG Chatbot (FAISS)</h1>
+  <div id="chat" aria-live="polite" aria-busy="false"></div>
+
+  <div class="row">
+    <textarea id="q" placeholder="Message something to therapy bot… (Shift+Enter for newline)"></textarea>
+    <button id="send">Send</button>
+  </div>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const q    = document.getElementById("q");
+    const send = document.getElementById("send");
+
+    function append(role, text, cls="") {
+      const div = document.createElement("div");
+      div.className = "row " + cls;
+      div.innerHTML = `<strong>${role}:</strong> ${text}`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function appendSources(sources) {
+      const div = document.createElement("div");
+      div.className = "row srcs";
+      div.innerHTML = `<em>Sources:</em> ${sources.join(", ")}`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function ask() {
+      const question = q.value.trim();
+      if (!question) return;
+
+      append("You", question, "you");
+      q.value = "";
+      send.disabled = true;
+      chat.setAttribute("aria-busy", "true");
+
+      try {
+        const r = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: question })
+        });
+
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          throw new Error(`HTTP ${r.status} ${r.statusText}${text ? ` — ${text}` : ""}`);
+        }
+
+        const data = await r.json();
+        append("Bot", data.answer || "(no answer)", "bot");
+        if (Array.isArray(data.sources) && data.sources.length) {
+          appendSources(data.sources);
+        }
+      } catch (err) {
+        append("Error", String(err));
+      } finally {
+        send.disabled = false;
+        chat.setAttribute("aria-busy", "false");
+        q.focus();
+      }
+    }
+
+    send.onclick = ask;
+
+    q.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        ask();
+      }
+    });
+  </script>
+</body>
+</html>
